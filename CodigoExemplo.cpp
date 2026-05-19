@@ -8,7 +8,7 @@
 #include <opencv2\videoio.hpp>
 
 extern "C" {
-#include "vc.h"
+#include "lib/vc.h"
 }
 
 int hue_in_range(unsigned char hue, int hmin, int hmax)
