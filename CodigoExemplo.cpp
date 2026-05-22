@@ -15,16 +15,12 @@ extern "C" {
 typedef struct
 {
 	int width, height;
-	int ntotalframes;
-	int fps;
-	int nframe;
 } VIDEOINFO;
 
 typedef struct
 {
 	int id;
 	int x, y;
-	int previousx, previousy;
 	int vx, vy;
 	int hits;
 	int seenabove;
@@ -72,41 +68,17 @@ int blob_hsv_color_count(IVC *image_hsv, IVC *image_labels, OVC blob, int hmin, 
 	return count;
 }
 
-int blob_mask_binary_paint(IVC *mask, IVC *image_labels, OVC blob, unsigned char value)
-{
-	long int pos_mask, pos_label;
-	int x, y;
-
-	if (mask == NULL || image_labels == NULL) return 0;
-
-	for (y = blob.y; y < blob.y + blob.height; y++)
-	{
-		for (x = blob.x; x < blob.x + blob.width; x++)
-		{
-			pos_label = y * image_labels->bytesperline + x * image_labels->channels;
-
-			if (image_labels->data[pos_label] == blob.label)
-			{
-				pos_mask = y * mask->bytesperline + x * mask->channels;
-				mask->data[pos_mask] = value;
-			}
-		}
-	}
-
-	return 1;
-}
-
 void draw_text(cv::Mat &frame, const std::string &text, int x, int y, cv::Scalar color, double scale)
 {
 	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, color, 2);
 	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, cv::Scalar(0, 0, 0), 1);
 }
 
-void frame_bgr_to_rgb(cv::Mat frame, IVC *image_rgb)
+void frame_bgr_to_rgb(const cv::Mat &frame, IVC *image_rgb)
 {
 	for (int y = 0; y < frame.rows; y++)
 	{
-		unsigned char *data = frame.ptr<unsigned char>(y);
+		const unsigned char *data = frame.ptr<unsigned char>(y);
 
 		for (int x = 0; x < frame.cols; x++)
 		{
@@ -213,8 +185,6 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	int oldx = track->x;
 	int oldy = track->y;
 
-	track->previousx = track->x;
-	track->previousy = track->y;
 	track->x = blob.xc;
 	track->y = blob.yc;
 	track->vx = track->x - oldx;
@@ -241,8 +211,6 @@ void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused
 	newtrack.id = (*nexttrackid)++;
 	newtrack.x = blob.xc;
 	newtrack.y = blob.yc;
-	newtrack.previousx = blob.xc;
-	newtrack.previousy = blob.yc;
 	newtrack.vx = 0;
 	newtrack.vy = 0;
 	newtrack.hits = 1;
@@ -290,8 +258,6 @@ int main(void)
 		return 1;
 	}
 
-	video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
-	video.fps = (int)capture.get(cv::CAP_PROP_FPS);
 	video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
 	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
 
@@ -305,10 +271,9 @@ int main(void)
 	IVC *image_seg = vc_image_new(video.width, video.height, 1, 255);
 	IVC *image_tmp = vc_image_new(video.width, video.height, 1, 255);
 	IVC *image_labels = vc_image_new(video.width, video.height, 1, 255);
-	IVC *image_final = vc_image_new(video.width, video.height, 1, 255);
 
 	if (image_rgb == NULL || image_hsv == NULL || image_seg_rgb == NULL ||
-		image_seg == NULL || image_tmp == NULL || image_labels == NULL || image_final == NULL)
+		image_seg == NULL || image_tmp == NULL || image_labels == NULL)
 	{
 		std::cerr << "Erro ao alocar memoria para imagens IVC!\n";
 		vc_image_free(image_rgb);
@@ -317,25 +282,20 @@ int main(void)
 		vc_image_free(image_seg);
 		vc_image_free(image_tmp);
 		vc_image_free(image_labels);
-		vc_image_free(image_final);
 		capture.release();
 		return 1;
 	}
 
 	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
 	cv::namedWindow("VC - SEGMENTACAO", cv::WINDOW_AUTOSIZE);
-	cv::namedWindow("VC - LARANJAS", cv::WINDOW_AUTOSIZE);
 
 	while (key != 'q')
 	{
 		capture.read(frame);
 		if (frame.empty()) break;
 
-		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
-
 		frame_bgr_to_rgb(frame, image_rgb);
 		segment_oranges(image_rgb, image_hsv, image_seg_rgb, image_seg, image_tmp);
-		memset(image_final->data, 0, image_final->bytesperline * image_final->height);
 
 		int nlabels = 0;
 		int nlaranjas = 0;
@@ -355,7 +315,6 @@ int main(void)
 				if (!blob_passes_color(image_hsv, image_labels, blobs[i])) continue;
 
 				nlaranjas++;
-				blob_mask_binary_paint(image_final, image_labels, blobs[i], 255);
 
 				besttrack = find_best_track(tracks, trackused, blobs[i].xc, blobs[i].yc);
 
@@ -399,11 +358,9 @@ int main(void)
 		cv::line(frame, cv::Point(0, countingliney), cv::Point(video.width, countingliney), cv::Scalar(0, 200, 255), 1);
 
 		cv::Mat frame_segmentada(video.height, video.width, CV_8UC1, image_seg->data);
-		cv::Mat frame_laranjas(video.height, video.width, CV_8UC1, image_final->data);
 
 		cv::imshow("VC - VIDEO", frame);
 		cv::imshow("VC - SEGMENTACAO", frame_segmentada);
-		cv::imshow("VC - LARANJAS", frame_laranjas);
 
 		key = cv::waitKey(1);
 	}
@@ -414,7 +371,6 @@ int main(void)
 	vc_image_free(image_seg);
 	vc_image_free(image_tmp);
 	vc_image_free(image_labels);
-	vc_image_free(image_final);
 	capture.release();
 	cv::destroyAllWindows();
 
