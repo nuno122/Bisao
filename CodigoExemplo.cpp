@@ -2,11 +2,12 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
-#include <opencv2\opencv.hpp>
-#include <opencv2\core.hpp>
-#include <opencv2\highgui.hpp>
-#include <opencv2\videoio.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
 
 extern "C" {
 #include "lib/vc.h"
@@ -19,14 +20,25 @@ typedef struct
 
 typedef struct
 {
-	int id;
 	int x, y;
 	int vx, vy;
 	int hits;
 	int seenabove;
 	int missingframes;
 	int counted;
+	int categoryextra;
+	int categoryi;
+	int categoryii;
 } ORANGETRACK;
+
+typedef struct
+{
+	int orangepixels;
+	int redpixels;
+	int yellowpixels;
+	int greenpixels;
+	int totalcolorpixels;
+} ORANGECOLORINFO;
 
 int hue_in_range(unsigned char hue, int hmin, int hmax)
 {
@@ -102,6 +114,122 @@ void segment_oranges(IVC *image_rgb, IVC *image_hsv, IVC *image_seg_rgb, IVC *im
 	vc_binary_open(image_tmp, image_seg, 3, 3);
 }
 
+float blob_aspect_ratio(OVC blob)
+{
+	if (blob.height == 0) return 0.0f;
+	return (float)blob.width / (float)blob.height;
+}
+
+float blob_circularity(OVC blob)
+{
+	if (blob.perimeter == 0) return 0.0f;
+
+	return (float)((4.0 * 3.1415926535 * blob.area) /
+		((double)blob.perimeter * (double)blob.perimeter));
+}
+
+void blob_get_color_info(IVC *image_hsv, IVC *image_labels, OVC blob, ORANGECOLORINFO *colorinfo)
+{
+	colorinfo->orangepixels = blob_hsv_color_count(image_hsv, image_labels, blob, 8, 38, 25, 20);
+	colorinfo->redpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 340, 15, 30, 20);
+	colorinfo->yellowpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 39, 70, 25, 20);
+	colorinfo->greenpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 66, 140, 20, 20);
+	colorinfo->totalcolorpixels = colorinfo->orangepixels + colorinfo->redpixels +
+		colorinfo->yellowpixels + colorinfo->greenpixels;
+}
+
+double orange_diameter_px(OVC blob)
+{
+	return (double)blob.width;
+}
+
+double pixels_to_mm(double pixels)
+{
+	return pixels * (55.0 / 280.0);
+}
+
+int orange_calibre_from_mm(double diameter_mm)
+{
+	if (diameter_mm >= 100.0) return 0;
+	if (diameter_mm >= 87.0) return 1;
+	if (diameter_mm >= 84.0) return 2;
+	if (diameter_mm >= 81.0) return 3;
+	if (diameter_mm >= 77.0) return 4;
+	if (diameter_mm >= 73.0) return 5;
+	if (diameter_mm >= 70.0) return 6;
+	if (diameter_mm >= 67.0) return 7;
+	if (diameter_mm >= 64.0) return 8;
+	if (diameter_mm >= 62.0) return 9;
+	if (diameter_mm >= 60.0) return 10;
+	if (diameter_mm >= 58.0) return 11;
+	if (diameter_mm >= 56.0) return 12;
+	if (diameter_mm >= 53.0) return 13;
+	return -1;
+}
+
+const char *orange_category(OVC blob, ORANGECOLORINFO colorinfo)
+{
+	float aspectratio;
+	float circularidade;
+	float orangeratio;
+	float redratio;
+	float yellowratio;
+	float greenratio;
+
+	if (colorinfo.totalcolorpixels <= 0) return "II";
+
+	aspectratio = blob_aspect_ratio(blob);
+	circularidade = blob_circularity(blob);
+	orangeratio = (float)colorinfo.orangepixels / (float)colorinfo.totalcolorpixels;
+	redratio = (float)colorinfo.redpixels / (float)colorinfo.totalcolorpixels;
+	yellowratio = (float)colorinfo.yellowpixels / (float)colorinfo.totalcolorpixels;
+	greenratio = (float)colorinfo.greenpixels / (float)colorinfo.totalcolorpixels;
+
+	if ((aspectratio >= 0.80f) && (aspectratio <= 1.25f) &&
+		(circularidade >= 0.60f) &&
+		(orangeratio >= 0.60f) &&
+		(redratio <= 0.08f) &&
+		(yellowratio <= 0.35f) &&
+		(greenratio <= 0.05f))
+	{
+		return "EXTRA";
+	}
+
+	if ((aspectratio >= 0.60f) && (aspectratio <= 1.60f) &&
+		(circularidade >= 0.35f) &&
+		(orangeratio >= 0.45f) &&
+		(redratio <= 0.15f) &&
+		(yellowratio <= 0.55f) &&
+		(greenratio <= 0.10f))
+	{
+		return "I";
+	}
+
+	return "II";
+}
+
+void track_add_category_vote(ORANGETRACK *track, const char *categoria)
+{
+	if (strcmp(categoria, "EXTRA") == 0) track->categoryextra++;
+	else if (strcmp(categoria, "I") == 0) track->categoryi++;
+	else track->categoryii++;
+}
+
+const char *track_get_category(ORANGETRACK track)
+{
+	if ((track.categoryextra >= track.categoryi) && (track.categoryextra >= track.categoryii))
+	{
+		return "EXTRA";
+	}
+
+	if (track.categoryi >= track.categoryii)
+	{
+		return "I";
+	}
+
+	return "II";
+}
+
 int blob_passes_geometry(OVC blob, int maxblobarea)
 {
 	float aspectratio;
@@ -110,9 +238,8 @@ int blob_passes_geometry(OVC blob, int maxblobarea)
 	if (blob.height == 0 || blob.perimeter == 0) return 0;
 	if (blob.area < 1500 || blob.area > maxblobarea) return 0;
 
-	aspectratio = (float)blob.width / (float)blob.height;
-	circularidade = (float)((4.0 * 3.1415926535 * blob.area) /
-		((double)blob.perimeter * (double)blob.perimeter));
+	aspectratio = blob_aspect_ratio(blob);
+	circularidade = blob_circularity(blob);
 
 	if (aspectratio < 0.45f || aspectratio > 2.20f) return 0;
 	if (circularidade < 0.20f) return 0;
@@ -120,30 +247,18 @@ int blob_passes_geometry(OVC blob, int maxblobarea)
 	return 1;
 }
 
-int blob_passes_color(IVC *image_hsv, IVC *image_labels, OVC blob)
+int blob_passes_color(OVC blob, ORANGECOLORINFO colorinfo)
 {
-	int orangepixels;
-	int redpixels;
-	int yellowpixels;
-	int greenpixels;
-	int totalcolorpixels;
-
-	orangepixels = blob_hsv_color_count(image_hsv, image_labels, blob, 8, 38, 25, 20);
-	redpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 340, 15, 30, 20);
-	yellowpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 39, 70, 25, 20);
-	greenpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 66, 140, 20, 20);
-	totalcolorpixels = orangepixels + redpixels + yellowpixels + greenpixels;
-
-	if (totalcolorpixels == 0) return 0;
-	if (totalcolorpixels < (blob.area * 35 / 100)) return 0;
-	if (orangepixels < (totalcolorpixels * 25 / 100)) return 0;
-	if (orangepixels <= redpixels) return 0;
-	if (orangepixels <= yellowpixels) return 0;
-	if (orangepixels <= greenpixels) return 0;
-	if (redpixels > (totalcolorpixels * 18 / 100)) return 0;
-	if (yellowpixels > (totalcolorpixels * 55 / 100)) return 0;
-	if (greenpixels > (totalcolorpixels * 15 / 100)) return 0;
-	if ((redpixels + yellowpixels) > orangepixels) return 0;
+	if (colorinfo.totalcolorpixels == 0) return 0;
+	if (colorinfo.totalcolorpixels < (blob.area * 35 / 100)) return 0;
+	if (colorinfo.orangepixels < (colorinfo.totalcolorpixels * 25 / 100)) return 0;
+	if (colorinfo.orangepixels <= colorinfo.redpixels) return 0;
+	if (colorinfo.orangepixels <= colorinfo.yellowpixels) return 0;
+	if (colorinfo.orangepixels <= colorinfo.greenpixels) return 0;
+	if (colorinfo.redpixels > (colorinfo.totalcolorpixels * 18 / 100)) return 0;
+	if (colorinfo.yellowpixels > (colorinfo.totalcolorpixels * 55 / 100)) return 0;
+	if (colorinfo.greenpixels > (colorinfo.totalcolorpixels * 15 / 100)) return 0;
+	if ((colorinfo.redpixels + colorinfo.yellowpixels) > colorinfo.orangepixels) return 0;
 
 	return 1;
 }
@@ -180,7 +295,7 @@ int find_best_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackuse
 	return besttrack;
 }
 
-void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int countbandtopy, int *total_laranjas)
+void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int countbandtopy, int *total_laranjas, const char *categoria)
 {
 	int oldx = track->x;
 	int oldy = track->y;
@@ -192,6 +307,7 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	track->hits++;
 	if (track->y < countingliney) track->seenabove = 1;
 	track->missingframes = 0;
+	track_add_category_vote(track, categoria);
 
 	if ((track->counted == 0) &&
 		(track->hits >= 3) &&
@@ -204,11 +320,10 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	}
 }
 
-void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, int *nexttrackid, OVC blob, int countingliney)
+void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, OVC blob, int countingliney, const char *categoria)
 {
 	ORANGETRACK newtrack;
 
-	newtrack.id = (*nexttrackid)++;
 	newtrack.x = blob.xc;
 	newtrack.y = blob.yc;
 	newtrack.vx = 0;
@@ -217,6 +332,10 @@ void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused
 	newtrack.seenabove = (blob.yc < countingliney) ? 1 : 0;
 	newtrack.missingframes = 0;
 	newtrack.counted = 0;
+	newtrack.categoryextra = 0;
+	newtrack.categoryi = 0;
+	newtrack.categoryii = 0;
+	track_add_category_vote(&newtrack, categoria);
 
 	tracks.push_back(newtrack);
 	trackused.push_back(1);
@@ -247,7 +366,6 @@ int main(void)
 
 	VIDEOINFO video;
 	std::vector<ORANGETRACK> tracks;
-	int nexttrackid = 1;
 	int total_laranjas = 0;
 
 	capture.open(videofile);
@@ -309,24 +427,41 @@ int main(void)
 			for (int i = 0; i < nlabels; i++)
 			{
 				int besttrack;
-				std::string str;
+				ORANGECOLORINFO colorinfo;
+				double diameterpx;
+				double diametermm;
+				int calibre;
+				const char *categoria;
+				int texty;
+				char str1[64];
+				char str2[128];
 
 				if (!blob_passes_geometry(blobs[i], maxblobarea)) continue;
-				if (!blob_passes_color(image_hsv, image_labels, blobs[i])) continue;
+
+				blob_get_color_info(image_hsv, image_labels, blobs[i], &colorinfo);
+				if (!blob_passes_color(blobs[i], colorinfo)) continue;
 
 				nlaranjas++;
+
+				diameterpx = orange_diameter_px(blobs[i]);
+				diametermm = pixels_to_mm(diameterpx);
+				calibre = orange_calibre_from_mm(diametermm);
+				categoria = orange_category(blobs[i], colorinfo);
 
 				besttrack = find_best_track(tracks, trackused, blobs[i].xc, blobs[i].yc);
 
 				if (besttrack >= 0)
 				{
-					update_existing_track(&tracks[besttrack], blobs[i], countingliney, countbandtopy, &total_laranjas);
+					update_existing_track(&tracks[besttrack], blobs[i], countingliney, countbandtopy, &total_laranjas, categoria);
 					trackused[besttrack] = 1;
 				}
 				else
 				{
-					add_new_track(tracks, trackused, &nexttrackid, blobs[i], countingliney);
+					add_new_track(tracks, trackused, blobs[i], countingliney, categoria);
+					besttrack = (int)tracks.size() - 1;
 				}
+
+				categoria = track_get_category(tracks[besttrack]);
 
 				cv::rectangle(frame,
 					cv::Point(blobs[i].x, blobs[i].y),
@@ -339,9 +474,21 @@ int main(void)
 					cv::Scalar(0, 0, 255),
 					-1);
 
-				str = std::string("A=").append(std::to_string(blobs[i].area))
-					.append(" P=").append(std::to_string(blobs[i].perimeter));
-				draw_text(frame, str, blobs[i].x, blobs[i].y - 10, cv::Scalar(0, 255, 0), 0.5);
+				texty = blobs[i].y - 24;
+				if (texty < 20) texty = blobs[i].y + blobs[i].height + 18;
+
+				snprintf(str1, sizeof(str1), "A=%d P=%d", blobs[i].area, blobs[i].perimeter);
+				if (calibre >= 0)
+				{
+					snprintf(str2, sizeof(str2), "D=%.1fmm CAL=%d CAT=%s", diametermm, calibre, categoria);
+				}
+				else
+				{
+					snprintf(str2, sizeof(str2), "D=%.1fmm CAL=-- CAT=%s", diametermm, categoria);
+				}
+
+				draw_text(frame, str1, blobs[i].x, texty, cv::Scalar(0, 255, 0), 0.5);
+				draw_text(frame, str2, blobs[i].x, texty + 16, cv::Scalar(0, 255, 0), 0.5);
 			}
 
 			free(blobs);
@@ -372,7 +519,8 @@ int main(void)
 	vc_image_free(image_tmp);
 	vc_image_free(image_labels);
 	capture.release();
-	cv::destroyAllWindows();
+	cv::destroyWindow("VC - VIDEO");
+	cv::destroyWindow("VC - SEGMENTACAO");
 
 	return 0;
 }
