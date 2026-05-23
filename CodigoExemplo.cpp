@@ -23,12 +23,12 @@ typedef struct
 	int x, y;
 	int vx, vy;
 	int hits;
-	int seenabove;
 	int missingframes;
 	int counted;
 	int categoryextra;
 	int categoryi;
 	int categoryii;
+	int categoryiii;
 } ORANGETRACK;
 
 typedef struct
@@ -138,11 +138,6 @@ void blob_get_color_info(IVC *image_hsv, IVC *image_labels, OVC blob, ORANGECOLO
 		colorinfo->yellowpixels + colorinfo->greenpixels;
 }
 
-double orange_diameter_px(OVC blob)
-{
-	return (double)blob.width;
-}
-
 double pixels_to_mm(double pixels)
 {
 	return pixels * (55.0 / 280.0);
@@ -176,7 +171,7 @@ const char *orange_category(OVC blob, ORANGECOLORINFO colorinfo)
 	float yellowratio;
 	float greenratio;
 
-	if (colorinfo.totalcolorpixels <= 0) return "II";
+	if (colorinfo.totalcolorpixels <= 0) return "III";
 
 	aspectratio = blob_aspect_ratio(blob);
 	circularidade = blob_circularity(blob);
@@ -205,29 +200,48 @@ const char *orange_category(OVC blob, ORANGECOLORINFO colorinfo)
 		return "I";
 	}
 
-	return "II";
+	if ((aspectratio >= 0.50f) && (aspectratio <= 1.90f) &&
+		(circularidade >= 0.25f) &&
+		(orangeratio >= 0.35f) &&
+		(redratio <= 0.18f) &&
+		(yellowratio <= 0.65f) &&
+		(greenratio <= 0.15f))
+	{
+		return "II";
+	}
+
+	return "III";
 }
 
 void track_add_category_vote(ORANGETRACK *track, const char *categoria)
 {
 	if (strcmp(categoria, "EXTRA") == 0) track->categoryextra++;
 	else if (strcmp(categoria, "I") == 0) track->categoryi++;
-	else track->categoryii++;
+	else if (strcmp(categoria, "II") == 0) track->categoryii++;
+	else track->categoryiii++;
 }
 
 const char *track_get_category(ORANGETRACK track)
 {
-	if ((track.categoryextra >= track.categoryi) && (track.categoryextra >= track.categoryii))
+	if ((track.categoryextra >= track.categoryi) &&
+		(track.categoryextra >= track.categoryii) &&
+		(track.categoryextra >= track.categoryiii))
 	{
 		return "EXTRA";
 	}
 
-	if (track.categoryi >= track.categoryii)
+	if ((track.categoryi >= track.categoryii) &&
+		(track.categoryi >= track.categoryiii))
 	{
 		return "I";
 	}
 
-	return "II";
+	if (track.categoryii >= track.categoryiii)
+	{
+		return "II";
+	}
+
+	return "III";
 }
 
 int blob_passes_geometry(OVC blob, int maxblobarea)
@@ -295,24 +309,24 @@ int find_best_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackuse
 	return besttrack;
 }
 
-void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int countbandtopy, int *total_laranjas, const char *categoria)
+void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int *total_laranjas, const char *categoria)
 {
 	int oldx = track->x;
 	int oldy = track->y;
+	int crossedline;
 
 	track->x = blob.xc;
 	track->y = blob.yc;
 	track->vx = track->x - oldx;
 	track->vy = track->y - oldy;
 	track->hits++;
-	if (track->y < countingliney) track->seenabove = 1;
 	track->missingframes = 0;
 	track_add_category_vote(track, categoria);
+	crossedline = (oldy < countingliney) && (track->y >= countingliney);
 
 	if ((track->counted == 0) &&
 		(track->hits >= 3) &&
-		(track->seenabove != 0) &&
-		(track->y >= countbandtopy) &&
+		(crossedline != 0) &&
 		(track->vy >= 0))
 	{
 		track->counted = 1;
@@ -320,7 +334,7 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	}
 }
 
-void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, OVC blob, int countingliney, const char *categoria)
+void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, OVC blob, const char *categoria)
 {
 	ORANGETRACK newtrack;
 
@@ -329,12 +343,12 @@ void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused
 	newtrack.vx = 0;
 	newtrack.vy = 0;
 	newtrack.hits = 1;
-	newtrack.seenabove = (blob.yc < countingliney) ? 1 : 0;
 	newtrack.missingframes = 0;
 	newtrack.counted = 0;
 	newtrack.categoryextra = 0;
 	newtrack.categoryi = 0;
 	newtrack.categoryii = 0;
+	newtrack.categoryiii = 0;
 	track_add_category_vote(&newtrack, categoria);
 
 	tracks.push_back(newtrack);
@@ -380,7 +394,6 @@ int main(void)
 	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
 
 	int countingliney = (video.height * 60) / 100;
-	int countbandtopy = (video.height * 55) / 100;
 	int maxblobarea = (video.width * video.height * 70) / 100;
 
 	IVC *image_rgb = vc_image_new(video.width, video.height, 3, 255);
@@ -428,7 +441,6 @@ int main(void)
 			{
 				int besttrack;
 				ORANGECOLORINFO colorinfo;
-				double diameterpx;
 				double diametermm;
 				int calibre;
 				const char *categoria;
@@ -443,8 +455,7 @@ int main(void)
 
 				nlaranjas++;
 
-				diameterpx = orange_diameter_px(blobs[i]);
-				diametermm = pixels_to_mm(diameterpx);
+				diametermm = pixels_to_mm((double)blobs[i].width);
 				calibre = orange_calibre_from_mm(diametermm);
 				categoria = orange_category(blobs[i], colorinfo);
 
@@ -452,12 +463,12 @@ int main(void)
 
 				if (besttrack >= 0)
 				{
-					update_existing_track(&tracks[besttrack], blobs[i], countingliney, countbandtopy, &total_laranjas, categoria);
+					update_existing_track(&tracks[besttrack], blobs[i], countingliney, &total_laranjas, categoria);
 					trackused[besttrack] = 1;
 				}
 				else
 				{
-					add_new_track(tracks, trackused, blobs[i], countingliney, categoria);
+					add_new_track(tracks, trackused, blobs[i], categoria);
 					besttrack = (int)tracks.size() - 1;
 				}
 
@@ -501,8 +512,7 @@ int main(void)
 		draw_text(frame, std::string("TOTAL LARANJAS: ").append(std::to_string(total_laranjas)),
 			20, 80, cv::Scalar(255, 255, 0), 0.8);
 
-		cv::line(frame, cv::Point(0, countbandtopy), cv::Point(video.width, countbandtopy), cv::Scalar(255, 255, 0), 2);
-		cv::line(frame, cv::Point(0, countingliney), cv::Point(video.width, countingliney), cv::Scalar(0, 200, 255), 1);
+		cv::line(frame, cv::Point(0, countingliney), cv::Point(video.width, countingliney), cv::Scalar(0, 200, 255), 2);
 
 		cv::Mat frame_segmentada(video.height, video.width, CV_8UC1, image_seg->data);
 

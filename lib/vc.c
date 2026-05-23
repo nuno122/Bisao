@@ -1,13 +1,4 @@
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//           INSTITUTO POLIT�CNICO DO C�VADO E DO AVE
-//                          2022/2023
-//             ENGENHARIA DE SISTEMAS INFORM�TICOS
-//                    VIS�O POR COMPUTADOR
-//
-//             [  DUARTE DUQUE - dduque@ipca.pt  ]
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-// Desabilita (no MSVC++) warnings de fun��es n�o seguras (fopen, sscanf, etc...)
+﻿
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <stdio.h>
@@ -21,12 +12,7 @@
 #endif
 
 
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//            FUN��ES: ALOCAR E LIBERTAR UMA IMAGEM
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
-// Alocar mem�ria para uma imagem
+// Aloca memoria para uma imagem IVC
 IVC *vc_image_new(int width, int height, int channels, int levels)
 {
 	IVC *image = (IVC *) malloc(sizeof(IVC));
@@ -50,7 +36,7 @@ IVC *vc_image_new(int width, int height, int channels, int levels)
 }
 
 
-// Libertar mem�ria de uma imagem
+// Liberta memoria de uma imagem IVC
 IVC *vc_image_free(IVC *image)
 {
 	if(image != NULL)
@@ -67,12 +53,6 @@ IVC *vc_image_free(IVC *image)
 
 	return image;
 }
-
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//    FUN��ES: LEITURA E ESCRITA DE IMAGENS (PBM, PGM E PPM)
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 
 char *netpbm_get_token(FILE *file, char *tok, int len)
 {
@@ -106,7 +86,6 @@ char *netpbm_get_token(FILE *file, char *tok, int len)
 	return tok;
 }
 
-
 long int unsigned_char_to_bit(unsigned char *datauchar, unsigned char *databit, int width, int height)
 {
 	int x, y;
@@ -126,14 +105,7 @@ long int unsigned_char_to_bit(unsigned char *datauchar, unsigned char *databit, 
 
 			if(countbits <= 8)
 			{
-				// Numa imagem PBM:
-				// 1 = Preto
-				// 0 = Branco
-				//*p |= (datauchar[pos] != 0) << (8 - countbits);
 				
-				// Na nossa imagem:
-				// 1 = Branco
-				// 0 = Preto
 				*p |= (datauchar[pos] == 0) << (8 - countbits);
 
 				countbits++;
@@ -150,7 +122,6 @@ long int unsigned_char_to_bit(unsigned char *datauchar, unsigned char *databit, 
 
 	return counttotalbytes;
 }
-
 
 void bit_to_unsigned_char(unsigned char *databit, unsigned char *datauchar, int width, int height)
 {
@@ -169,14 +140,7 @@ void bit_to_unsigned_char(unsigned char *databit, unsigned char *datauchar, int 
 
 			if(countbits <= 8)
 			{
-				// Numa imagem PBM:
-				// 1 = Preto
-				// 0 = Branco
-				//datauchar[pos] = (*p & (1 << (8 - countbits))) ? 1 : 0;
 
-				// Na nossa imagem:
-				// 1 = Branco
-				// 0 = Preto
 				datauchar[pos] = (*p & (1 << (8 - countbits))) ? 0 : 1;
 				
 				countbits++;
@@ -190,7 +154,6 @@ void bit_to_unsigned_char(unsigned char *databit, unsigned char *datauchar, int 
 	}
 }
 
-
 IVC *vc_read_image(char *filename)
 {
 	FILE *file = NULL;
@@ -202,15 +165,13 @@ IVC *vc_read_image(char *filename)
 	int levels = 255;
 	int v;
 	
-	// Abre o ficheiro
 	if((file = fopen(filename, "rb")) != NULL)
 	{
-		// Efectua a leitura do header
 		netpbm_get_token(file, tok, sizeof(tok));
 
-		if(strcmp(tok, "P4") == 0) { channels = 1; levels = 1; }	// Se PBM (Binary [0,1])
-		else if(strcmp(tok, "P5") == 0) channels = 1;				// Se PGM (Gray [0,MAX(level,255)])
-		else if(strcmp(tok, "P6") == 0) channels = 3;				// Se PPM (RGB [0,MAX(level,255)])
+		if(strcmp(tok, "P4") == 0) { channels = 1; levels = 1; }
+		else if(strcmp(tok, "P5") == 0) channels = 1;
+		else if(strcmp(tok, "P6") == 0) channels = 3;
 		else
 		{
 			#ifdef VC_DEBUG
@@ -221,7 +182,7 @@ IVC *vc_read_image(char *filename)
 			return NULL;
 		}
 		
-		if(levels == 1) // PBM
+		if(levels == 1)
 		{
 			if(sscanf(netpbm_get_token(file, tok, sizeof(tok)), "%d", &width) != 1 || 
 			   sscanf(netpbm_get_token(file, tok, sizeof(tok)), "%d", &height) != 1)
@@ -234,7 +195,6 @@ IVC *vc_read_image(char *filename)
 				return NULL;
 			}
 
-			// Aloca mem�ria para imagem
 			image = vc_image_new(width, height, channels, levels);
 			if(image == NULL) return NULL;
 
@@ -262,7 +222,7 @@ IVC *vc_read_image(char *filename)
 
 			free(tmp);
 		}
-		else // PGM ou PPM
+		else
 		{
 			if(sscanf(netpbm_get_token(file, tok, sizeof(tok)), "%d", &width) != 1 || 
 			   sscanf(netpbm_get_token(file, tok, sizeof(tok)), "%d", &height) != 1 || 
@@ -276,7 +236,6 @@ IVC *vc_read_image(char *filename)
 				return NULL;
 			}
 
-			// Aloca mem�ria para imagem
 			image = vc_image_new(width, height, channels, levels);
 			if(image == NULL) return NULL;
 
@@ -309,7 +268,6 @@ IVC *vc_read_image(char *filename)
 	
 	return image;
 }
-
 
 int vc_write_image(char *filename, IVC *image)
 {
@@ -377,11 +335,9 @@ int vc_gray_negative(IVC *srcdst)
     int x, y;
     long int pos;
 
-    // Verificação de erros
     if((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
     if(channels != 1) return 0;
 
-    // Inverte a imagem Gray
     for(y=0; y<height; y++)
     {
         for(x=0; x<width; x++)
@@ -395,7 +351,6 @@ int vc_gray_negative(IVC *srcdst)
     return 1;
 }
 
-// Gerar negativo da imagem RGB
 int vc_rgb_negative(IVC *srcdst)
 {
     unsigned char *data = (unsigned char *) srcdst->data;
@@ -406,11 +361,9 @@ int vc_rgb_negative(IVC *srcdst)
     int x, y;
     long int pos;
 
-    // Verificação de erros
     if((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
     if(channels != 3) return 0;
 
-    // Inverte a imagem RGB
     for(y=0; y<height; y++)
     {
         for(x=0; x<width; x++)
@@ -426,8 +379,6 @@ int vc_rgb_negative(IVC *srcdst)
     return 1;
 }
 
-
-// Extrair componente Red da imagem RGB para Gray
 int vc_rgb_get_red_gray(IVC *srcdst)
 {
     unsigned char *data = (unsigned char *) srcdst->data;
@@ -438,19 +389,17 @@ int vc_rgb_get_red_gray(IVC *srcdst)
     int x, y;
     long int pos;
 
-    // Verificação de erros
     if((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
     if(channels != 3) return 0;
 
-    // Extrai a componente Red
     for(y=0; y<height; y++)
     {
         for(x=0; x<width; x++)
         {
             pos = y * bytesperline + x * channels;
 
-            data[pos + 1] = data[pos]; // Green
-            data[pos + 2] = data[pos]; // Blue
+            data[pos + 1] = data[pos];
+            data[pos + 2] = data[pos];
         }
     }
 
@@ -467,11 +416,9 @@ int vc_rgb_get_blue_gray(IVC *srcdst)
     int x, y;
     long int pos;
 
-    // Verificação de erros
     if((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
     if(channels != 3) return 0;
 
-    // Extrai a componente Red
     for(y=0; y<height; y++)
     {
         for(x=0; x<width; x++)
@@ -486,7 +433,6 @@ int vc_rgb_get_blue_gray(IVC *srcdst)
     return 1;
 }
 
-
 int vc_rgb_get_green_gray(IVC *srcdst)
 {
     unsigned char *data = (unsigned char *) srcdst->data;
@@ -497,11 +443,9 @@ int vc_rgb_get_green_gray(IVC *srcdst)
     int x, y;
     long int pos;
 
-    // Verificação de erros
     if((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
     if(channels != 3) return 0;
 
-    // Extrai a componente Red
     for(y=0; y<height; y++)
     {
         for(x=0; x<width; x++)
@@ -516,6 +460,8 @@ int vc_rgb_get_green_gray(IVC *srcdst)
     return 1;
 }
 
+
+// Converte RGB para imagem cinzenta
 int vc_rgb_to_gray(IVC *src, IVC *dst)
 {
     unsigned char *datasrc = (unsigned char *) src->data;
@@ -530,7 +476,6 @@ int vc_rgb_to_gray(IVC *src, IVC *dst)
     long int pos_src, pos_dst;
     float rf, gf, bf;
 
-    // Verificação de erros
     if((src->width <= 0) || (src->height <= 0) || (src->data == NULL)) return 0;
     if((src->width != dst->width) || (src->height != dst->height)) return 0;
     if((src->channels != 3) || (dst->channels != 1)) return 0;
@@ -553,6 +498,8 @@ int vc_rgb_to_gray(IVC *src, IVC *dst)
     return 1;
 }
 
+
+// Converte RGB para HSV
 int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
     unsigned char *datasrc = (unsigned char *) src->data;
@@ -566,7 +513,6 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
     int x;
     long int pos_src, pos_dst;
     float  hf, sf, vf;
-
 
 	for(x = 0; x < width * height * channels_src; x= x+channels_src)
 	{
@@ -608,8 +554,7 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 	}
 
 
-
-
+// Segmenta objetos por intervalo HSV
 	int vc_hsv_segmentation(IVC *src, IVC *dst, int hmin, int hmax, int smin, int smax, int vmin, int vmax){
 	unsigned char *datasrc = (unsigned char *)src->data;
 	unsigned char *datadst = (unsigned char *)dst->data;
@@ -621,13 +566,10 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 	int hmin_deg, hmax_deg, hmin_255, hmax_255;
 	int hue_ok, sv_ok;
 
-	// Verificação de erros
 	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL)) return 0;
 	if ((src->width != dst->width) || (src->height != dst->height) || (src->channels != dst->channels)) return 0;
 	if (channels != 3) return 0;
 
-	// Hue entra em graus [0,360], mas no pixel HSV está em [0,255].
-	// Normaliza e converte para comparar diretamente com datasrc[i].
 	hmin_deg = hmin;
 	hmax_deg = hmax;
 	if (hmin_deg < 0) hmin_deg = 0;
@@ -641,7 +583,6 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
 	for (i = 0; i<size; i = i + channels)
 	{
-		// Se hmax < hmin, o intervalo de Hue atravessa 360->0 (zona do vermelho).
 		if (hmin_255 <= hmax_255)
 		{
 			hue_ok = (datasrc[i] >= hmin_255) && (datasrc[i] <= hmax_255);
@@ -656,9 +597,9 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
 		if (hue_ok && sv_ok)
 		{
-			datadst[i] = 255; //datasrc[i];
-			datadst[i + 1] = 255; //datasrc[i + 1];
-			datadst[i + 2] = 255; //datasrc[i + 2];
+			datadst[i] = 255;
+			datadst[i + 1] = 255;
+			datadst[i + 2] = 255;
 		}
 		else
 		{
@@ -670,8 +611,6 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
 	return 1;
 }
-
-
 
 int vc_scale_gray_to_rgb(IVC *src, IVC *dst) {
     unsigned char *datasrc = (unsigned char *) src->data;
@@ -697,7 +636,6 @@ int vc_scale_gray_to_rgb(IVC *src, IVC *dst) {
             int gray = datasrc[pos_src];
             int r, g, b;
 
-          
             if (gray < 64) {
                 r = 0;
                 g = (gray * 255) / 64; 
@@ -729,7 +667,6 @@ int vc_scale_gray_to_rgb(IVC *src, IVC *dst) {
 
     return 1;
 }
-
 
 int count_pixels_bw(IVC *image, int *white, int *black)
 {
@@ -775,7 +712,6 @@ int count_colors_mask(IVC *image, IVC *mask, int *red, int *yellow, int *green, 
     {
         int mr = pmask[i * channels + 0];
 
-       
         if(mr == 0)
         {
             (*brain)++;
@@ -784,7 +720,6 @@ int count_colors_mask(IVC *image, IVC *mask, int *red, int *yellow, int *green, 
             int s = pimg[i * channels + 1];
             int v = pimg[i * channels + 2];
 
-            
             if(v < 50 || s < 50)
             {
                 (*blue)++;
@@ -837,7 +772,6 @@ int vc_gray_to_binary(IVC *src, IVC *dst, int threshold){
 
 	return 1;
 }
-
 
 int vc_gray_to_binary_global_mean(IVC *src, IVC *dst){
 
@@ -1015,7 +949,6 @@ int vc_binary_dilate(IVC *src, IVC *dst, int kernel){
 	return 1;
 }
 
-
 int vc_binary_erode(IVC *src, IVC *dst, int kernel){
 	unsigned char *datasrc = (unsigned char *) src->data;
 	int bytesperline_src = src->width * src->channels;
@@ -1066,6 +999,7 @@ int vc_binary_erode(IVC *src, IVC *dst, int kernel){
 }
 
 
+// Remove ruido pequeno com morfologia
 int vc_binary_open(IVC *src, IVC *dst, int kernel, int kernel2){
 	IVC *temp = vc_image_new(src->width, src->height, src->channels, src->levels);
 	if(temp == NULL) return 0;
@@ -1086,6 +1020,7 @@ int vc_binary_open(IVC *src, IVC *dst, int kernel, int kernel2){
 }
 
 
+// Fecha buracos na segmentacao
 int vc_binary_close(IVC *src, IVC *dst, int kernel, int kernel2){
 	IVC *temp = vc_image_new(src->width, src->height, src->channels, src->levels);
 	if(temp == NULL) return 0;
@@ -1121,7 +1056,6 @@ int vc_erode_minus_dilate(IVC *img1, IVC *img2, IVC *dst){
     return 1;
 }
 
-
 int vc_gray_mask(IVC *src, IVC *mask, IVC *dst)
 {
     unsigned char *datasrc = src->data;
@@ -1156,11 +1090,7 @@ int vc_gray_mask(IVC *src, IVC *mask, IVC *dst)
 }
 
 
-
-
-
-
-
+// Etiqueta os blobs da imagem binaria
 OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 {
 	unsigned char *datasrc = (unsigned char *)src->data;
@@ -1174,28 +1104,21 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 	long int posX, posA, posB, posC, posD;
 	int labeltable[256] = { 0 };
 	int labelarea[256] = { 0 };
-	int label = 1; // Etiqueta inicial.
+	int label = 1;
 	int num, tmplabel;
-	OVC *blobs; // Apontador para array de blobs (objectos) que ser� retornado desta fun��o.
+	OVC *blobs;
 
-	// Verifica��o de erros
 	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL)) return 0;
 	if ((src->width != dst->width) || (src->height != dst->height) || (src->channels != dst->channels)) return NULL;
 	if (channels != 1) return NULL;
 
-	// Copia dados da imagem bin�ria para imagem grayscale
 	memcpy(datadst, datasrc, bytesperline * height);
 
-	// Todos os pix�is de plano de fundo devem obrigat�riamente ter valor 0
-	// Todos os pix�is de primeiro plano devem obrigat�riamente ter valor 255
-	// Ser�o atribu�das etiquetas no intervalo [1,254]
-	// Este algoritmo est� assim limitado a 254 labels
 	for (i = 0, size = bytesperline * height; i<size; i++)
 	{
 		if (datadst[i] != 0) datadst[i] = 255;
 	}
 
-	// Limpa os rebordos da imagem bin�ria
 	for (y = 0; y<height; y++)
 	{
 		datadst[y * bytesperline + 0 * channels] = 0;
@@ -1207,22 +1130,17 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 		datadst[(height - 1) * bytesperline + x * channels] = 0;
 	}
 
-	// Efectua a etiquetagem
 	for (y = 1; y<height - 1; y++)
 	{
 		for (x = 1; x<width - 1; x++)
 		{
-			// Kernel:
-			// A B C
-			// D X
 
-			posA = (y - 1) * bytesperline + (x - 1) * channels; // A
-			posB = (y - 1) * bytesperline + x * channels; // B
-			posC = (y - 1) * bytesperline + (x + 1) * channels; // C
-			posD = y * bytesperline + (x - 1) * channels; // D
-			posX = y * bytesperline + x * channels; // X
+			posA = (y - 1) * bytesperline + (x - 1) * channels;
+			posB = (y - 1) * bytesperline + x * channels;
+			posC = (y - 1) * bytesperline + (x + 1) * channels;
+			posD = y * bytesperline + (x - 1) * channels;
+			posX = y * bytesperline + x * channels;
 
-			// Se o pixel foi marcado
 			if (datadst[posX] != 0)
 			{
 				if ((datadst[posA] == 0) && (datadst[posB] == 0) && (datadst[posC] == 0) && (datadst[posD] == 0))
@@ -1235,20 +1153,14 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 				{
 					num = 255;
 
-					// Se A est� marcado
 					if (datadst[posA] != 0) num = labeltable[datadst[posA]];
-					// Se B est� marcado, e � menor que a etiqueta "num"
 					if ((datadst[posB] != 0) && (labeltable[datadst[posB]] < num)) num = labeltable[datadst[posB]];
-					// Se C est� marcado, e � menor que a etiqueta "num"
 					if ((datadst[posC] != 0) && (labeltable[datadst[posC]] < num)) num = labeltable[datadst[posC]];
-					// Se D est� marcado, e � menor que a etiqueta "num"
 					if ((datadst[posD] != 0) && (labeltable[datadst[posD]] < num)) num = labeltable[datadst[posD]];
 
-					// Atribui a etiqueta ao pixel
 					datadst[posX] = num;
 					labeltable[num] = num;
 
-					// Actualiza a tabela de etiquetas
 					if (datadst[posA] != 0)
 					{
 						if (labeltable[datadst[posA]] != num)
@@ -1306,12 +1218,11 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 		}
 	}
 
-	// Volta a etiquetar a imagem
 	for (y = 1; y<height - 1; y++)
 	{
 		for (x = 1; x<width - 1; x++)
 		{
-			posX = y * bytesperline + x * channels; // X
+			posX = y * bytesperline + x * channels;
 
 			if (datadst[posX] != 0)
 			{
@@ -1320,10 +1231,6 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 		}
 	}
 
-	//printf("\nMax Label = %d\n", label);
-
-	// Contagem do n�mero de blobs
-	// Passo 1: Eliminar, da tabela, etiquetas repetidas
 	for (a = 1; a<label - 1; a++)
 	{
 		for (b = a + 1; b<label; b++)
@@ -1331,21 +1238,18 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 			if (labeltable[a] == labeltable[b]) labeltable[b] = 0;
 		}
 	}
-	// Passo 2: Conta etiquetas e organiza a tabela de etiquetas, para que n�o hajam valores vazios (zero) entre etiquetas
 	*nlabels = 0;
 	for (a = 1; a<label; a++)
 	{
 		if (labeltable[a] != 0)
 		{
-			labeltable[*nlabels] = labeltable[a]; // Organiza tabela de etiquetas
-			(*nlabels)++; // Conta etiquetas
+			labeltable[*nlabels] = labeltable[a];
+			(*nlabels)++;
 		}
 	}
 
-	// Se n�o h� blobs
 	if (*nlabels == 0) return NULL;
 
-	// Cria lista de blobs (objectos) e preenche a etiqueta
 	blobs = (OVC *)calloc((*nlabels), sizeof(OVC));
 	if (blobs != NULL)
 	{
@@ -1357,6 +1261,7 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 }
 
 
+// Calcula area, perimetro, bounding box e centro
 int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 {
 	unsigned char *data = (unsigned char *)src->data;
@@ -1369,11 +1274,9 @@ int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 	int xmin, ymin, xmax, ymax;
 	long int sumx, sumy;
 
-	// Verifica��o de erros
 	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL)) return 0;
 	if (channels != 1) return 0;
 
-	// Conta �rea de cada blob
 	for (i = 0; i<nblobs; i++)
 	{
 		xmin = width - 1;
@@ -1395,21 +1298,16 @@ int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 
 				if (data[pos] == blobs[i].label)
 				{
-					// �rea
 					blobs[i].area++;
 
-					// Centro de Gravidade
 					sumx += x;
 					sumy += y;
 
-					// Bounding Box
 					if (xmin > x) xmin = x;
 					if (ymin > y) ymin = y;
 					if (xmax < x) xmax = x;
 					if (ymax < y) ymax = y;
 
-					// Per�metro
-					// Se pelo menos um dos quatro vizinhos n�o pertence ao mesmo label, ent�o � um pixel de contorno
 					if ((data[pos - 1] != blobs[i].label) || (data[pos + 1] != blobs[i].label) || (data[pos - bytesperline] != blobs[i].label) || (data[pos + bytesperline] != blobs[i].label))
 					{
 						blobs[i].perimeter++;
@@ -1418,15 +1316,11 @@ int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 			}
 		}
 
-		// Bounding Box
 		blobs[i].x = xmin;
 		blobs[i].y = ymin;
 		blobs[i].width = (xmax - xmin) + 1;
 		blobs[i].height = (ymax - ymin) + 1;
 
-		// Centro de Gravidade
-		//blobs[i].xc = (xmax - xmin) / 2;
-		//blobs[i].yc = (ymax - ymin) / 2;
 		blobs[i].xc = sumx / MAX(blobs[i].area, 1);
 		blobs[i].yc = sumy / MAX(blobs[i].area, 1);
 	}
@@ -1434,8 +1328,6 @@ int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 	return 1;
 }
 
-
-//funçao histograma da imagem pgm
 int vc_histogram_image(IVC *src, IVC *dst)
 {
     int histogram[256] = {0}; 
@@ -1481,8 +1373,6 @@ int vc_histogram_image(IVC *src, IVC *dst)
     return 1;
 }
 
-
-//funçao equalizaçao do histograma da imagem pgm
 int vc_histogram_equalization(IVC *src, IVC *dst)
 {
 	int histogram[256] = {0}; 
@@ -1521,10 +1411,6 @@ int vc_histogram_equalization(IVC *src, IVC *dst)
 	return 1;
 }
 
-
-
-
-
 int vc_gray_edge_prewitt(IVC *src, IVC *dst, float th){
 	unsigned char *datasrc = (unsigned char *) src->data;
 	int bytesperline_src = src->width * src->channels;
@@ -1562,8 +1448,6 @@ int vc_gray_edge_prewitt(IVC *src, IVC *dst, float th){
 	}
 
 }
-
-
 
 int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
 	unsigned char *datasrc = (unsigned char *) src->data;
@@ -1609,9 +1493,6 @@ int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
 	return 1;
 }
 
-
-
-
 	int vc_gray_lowpass_median_filter(IVC *src, IVC *dst, int kernelsize)
 {
     if (!src || !dst || !src->data || !dst->data) return 0;
@@ -1637,7 +1518,6 @@ int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
 
             int count = 0;
 
-            // Recolher vizinhança
             for (ky = -kernelsize / 2; ky <= kernelsize / 2; ky++) {
                 for (kx = -kernelsize / 2; kx <= kernelsize / 2; kx++) {
 
@@ -1651,7 +1531,6 @@ int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
                 }
             }
 
-            // Ordenação simples (bubble/selection style)
             for (int i = 0; i < count - 1; i++) {
                 for (int j = i + 1; j < count; j++) {
                     if (window[i] > window[j]) {
@@ -1662,7 +1541,6 @@ int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
                 }
             }
 
-            // Mediana
             datadst[y * bytesperline + x] = window[count / 2];
         }
     }
@@ -1671,8 +1549,6 @@ int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
 
     return 1;
 }
-
-
 
 int vc_gray_lowpass_gaussian_filter(IVC *src, IVC *dst){
 	unsigned char *datasrc = (unsigned char *) src->data;
