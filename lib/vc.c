@@ -11,8 +11,6 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
-
-// Aloca memoria para uma imagem IVC
 IVC *vc_image_new(int width, int height, int channels, int levels)
 {
 	IVC *image = (IVC *) malloc(sizeof(IVC));
@@ -35,8 +33,6 @@ IVC *vc_image_new(int width, int height, int channels, int levels)
 	return image;
 }
 
-
-// Liberta memoria de uma imagem IVC
 IVC *vc_image_free(IVC *image)
 {
 	if(image != NULL)
@@ -460,8 +456,6 @@ int vc_rgb_get_green_gray(IVC *srcdst)
     return 1;
 }
 
-
-// Converte RGB para imagem cinzenta
 int vc_rgb_to_gray(IVC *src, IVC *dst)
 {
     unsigned char *datasrc = (unsigned char *) src->data;
@@ -498,8 +492,6 @@ int vc_rgb_to_gray(IVC *src, IVC *dst)
     return 1;
 }
 
-
-// Converte RGB para HSV
 int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
     unsigned char *datasrc = (unsigned char *) src->data;
@@ -553,8 +545,6 @@ int vc_rgb_to_hsv(IVC *src, IVC *dst){
 
 	}
 
-
-// Segmenta objetos por intervalo HSV
 	int vc_hsv_segmentation(IVC *src, IVC *dst, int hmin, int hmax, int smin, int smax, int vmin, int vmax){
 	unsigned char *datasrc = (unsigned char *)src->data;
 	unsigned char *datadst = (unsigned char *)dst->data;
@@ -998,8 +988,6 @@ int vc_binary_erode(IVC *src, IVC *dst, int kernel){
 	return 1;
 }
 
-
-// Remove ruido pequeno com morfologia
 int vc_binary_open(IVC *src, IVC *dst, int kernel, int kernel2){
 	IVC *temp = vc_image_new(src->width, src->height, src->channels, src->levels);
 	if(temp == NULL) return 0;
@@ -1019,8 +1007,6 @@ int vc_binary_open(IVC *src, IVC *dst, int kernel, int kernel2){
 
 }
 
-
-// Fecha buracos na segmentacao
 int vc_binary_close(IVC *src, IVC *dst, int kernel, int kernel2){
 	IVC *temp = vc_image_new(src->width, src->height, src->channels, src->levels);
 	if(temp == NULL) return 0;
@@ -1089,8 +1075,6 @@ int vc_gray_mask(IVC *src, IVC *mask, IVC *dst)
     return 1;
 }
 
-
-// Etiqueta os blobs da imagem binaria
 OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 {
 	unsigned char *datasrc = (unsigned char *)src->data;
@@ -1260,8 +1244,6 @@ OVC* vc_binary_blob_labelling(IVC *src, IVC *dst, int *nlabels)
 	return blobs;
 }
 
-
-// Calcula area, perimetro, bounding box e centro
 int vc_binary_blob_info(IVC *src, OVC *blobs, int nblobs)
 {
 	unsigned char *data = (unsigned char *)src->data;
