@@ -22,6 +22,7 @@ typedef struct
 	int hits;
 	int missingframes;
 	int counted;
+	double maxdiametermm;
 	int categoryextra;
 	int categoryi;
 	int categoryii;
@@ -79,8 +80,8 @@ int blob_hsv_color_count(IVC *image_hsv, IVC *image_labels, OVC blob, int hmin, 
 
 void draw_text(cv::Mat &frame, const std::string &text, int x, int y, cv::Scalar color, double scale)
 {
-	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, color, 2);
-	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, cv::Scalar(0, 0, 0), 1);
+	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, cv::Scalar(0, 0, 0), 2);
+	cv::putText(frame, text, cv::Point(x, y), cv::FONT_HERSHEY_SIMPLEX, scale, color, 1);
 }
 
 void frame_bgr_to_rgb(const cv::Mat &frame, IVC *image_rgb)
@@ -306,7 +307,7 @@ int find_best_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackuse
 	return besttrack;
 }
 
-void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int *total_laranjas, const char *categoria)
+void update_existing_track(ORANGETRACK *track, OVC blob, double diametermm, int countingliney, int *total_laranjas, const char *categoria)
 {
 	int oldx = track->x;
 	int oldy = track->y;
@@ -318,6 +319,7 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	track->vy = track->y - oldy;
 	track->hits++;
 	track->missingframes = 0;
+	if (diametermm > track->maxdiametermm) track->maxdiametermm = diametermm;
 	track_add_category_vote(track, categoria);
 	crossedline = (oldy < countingliney) && (track->y >= countingliney);
 
@@ -331,7 +333,7 @@ void update_existing_track(ORANGETRACK *track, OVC blob, int countingliney, int 
 	}
 }
 
-void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, OVC blob, const char *categoria)
+void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused, OVC blob, double diametermm, const char *categoria)
 {
 	ORANGETRACK newtrack;
 
@@ -342,6 +344,7 @@ void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused
 	newtrack.hits = 1;
 	newtrack.missingframes = 0;
 	newtrack.counted = 0;
+	newtrack.maxdiametermm = diametermm;
 	newtrack.categoryextra = 0;
 	newtrack.categoryi = 0;
 	newtrack.categoryii = 0;
@@ -366,6 +369,11 @@ void remove_missing_tracks(std::vector<ORANGETRACK> &tracks, std::vector<int> &t
 			tracks.erase(tracks.begin() + t);
 		}
 	}
+}
+
+int track_is_stable(ORANGETRACK track)
+{
+	return (track.hits >= 2);
 }
 
 int main(void)
@@ -439,7 +447,6 @@ int main(void)
 				int besttrack;
 				ORANGECOLORINFO colorinfo;
 				double diametermm;
-				int calibre;
 				const char *categoria;
 				int texty;
 				char str1[64];
@@ -450,25 +457,27 @@ int main(void)
 				blob_get_color_info(image_hsv, image_labels, blobs[i], &colorinfo);
 				if (!blob_passes_color(blobs[i], colorinfo)) continue;
 
-				nlaranjas++;
-
 				diametermm = pixels_to_mm((double)blobs[i].width);
-				calibre = orange_calibre_from_mm(diametermm);
 				categoria = orange_category(blobs[i], colorinfo);
 
 				besttrack = find_best_track(tracks, trackused, blobs[i].xc, blobs[i].yc);
 
 				if (besttrack >= 0)
 				{
-					update_existing_track(&tracks[besttrack], blobs[i], countingliney, &total_laranjas, categoria);
+					update_existing_track(&tracks[besttrack], blobs[i], diametermm, countingliney, &total_laranjas, categoria);
 					trackused[besttrack] = 1;
 				}
 				else
 				{
-					add_new_track(tracks, trackused, blobs[i], categoria);
+					add_new_track(tracks, trackused, blobs[i], diametermm, categoria);
 					besttrack = (int)tracks.size() - 1;
 				}
 
+				if (!track_is_stable(tracks[besttrack])) continue;
+
+				nlaranjas++;
+				diametermm = tracks[besttrack].maxdiametermm;
+				int calibre = orange_calibre_from_mm(diametermm);
 				categoria = track_get_category(tracks[besttrack]);
 
 				cv::rectangle(frame,
