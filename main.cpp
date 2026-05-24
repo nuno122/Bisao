@@ -22,7 +22,8 @@ typedef struct
 	int hits;
 	int missingframes;
 	int counted;
-	double maxdiametermm;
+	double bestdiametermm;
+	double bestshapescore;
 	int categoryextra;
 	int categoryi;
 	int categoryii;
@@ -36,6 +37,8 @@ typedef struct
 	int yellowpixels;
 	int greenpixels;
 	int totalcolorpixels;
+	int meansaturation;
+	int meanvalue;
 } ORANGECOLORINFO;
 
 int hue_in_range(unsigned char hue, int hmin, int hmax)
@@ -128,17 +131,64 @@ float blob_circularity(OVC blob)
 
 void blob_get_color_info(IVC *image_hsv, IVC *image_labels, OVC blob, ORANGECOLORINFO *colorinfo)
 {
+	long int pos_hsv, pos_label;
+	long int sumsaturation = 0;
+	long int sumvalue = 0;
+	int x, y;
+	int blobpixels = 0;
+
 	colorinfo->orangepixels = blob_hsv_color_count(image_hsv, image_labels, blob, 8, 38, 25, 20);
 	colorinfo->redpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 340, 15, 30, 20);
 	colorinfo->yellowpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 39, 70, 25, 20);
 	colorinfo->greenpixels = blob_hsv_color_count(image_hsv, image_labels, blob, 66, 140, 20, 20);
 	colorinfo->totalcolorpixels = colorinfo->orangepixels + colorinfo->redpixels +
 		colorinfo->yellowpixels + colorinfo->greenpixels;
+
+	for (y = blob.y; y < blob.y + blob.height; y++)
+	{
+		for (x = blob.x; x < blob.x + blob.width; x++)
+		{
+			pos_label = y * image_labels->bytesperline + x * image_labels->channels;
+
+			if (image_labels->data[pos_label] == blob.label)
+			{
+				pos_hsv = y * image_hsv->bytesperline + x * image_hsv->channels;
+				sumsaturation += image_hsv->data[pos_hsv + 1];
+				sumvalue += image_hsv->data[pos_hsv + 2];
+				blobpixels++;
+			}
+		}
+	}
+
+	if (blobpixels > 0)
+	{
+		colorinfo->meansaturation = (int)(sumsaturation / blobpixels);
+		colorinfo->meanvalue = (int)(sumvalue / blobpixels);
+	}
+	else
+	{
+		colorinfo->meansaturation = 0;
+		colorinfo->meanvalue = 0;
+	}
 }
 
 double pixels_to_mm(double pixels)
 {
 	return pixels * (55.0 / 280.0);
+}
+
+double blob_diameter_pixels(OVC blob)
+{
+	if (blob.area <= 0) return 0.0;
+	return 2.0 * sqrt((double)blob.area / 3.1415926535);
+}
+
+double blob_shape_score(OVC blob)
+{
+	double aspecterror = fabs((double)blob_aspect_ratio(blob) - 1.0);
+	double circularidade = (double)blob_circularity(blob);
+
+	return circularidade - (aspecterror * 0.5);
 }
 
 int orange_calibre_from_mm(double diameter_mm)
@@ -262,7 +312,9 @@ int blob_passes_geometry(OVC blob, int maxblobarea)
 int blob_passes_color(OVC blob, ORANGECOLORINFO colorinfo)
 {
 	if (colorinfo.totalcolorpixels == 0) return 0;
-	if (colorinfo.totalcolorpixels < (blob.area * 35 / 100)) return 0;
+	if (colorinfo.totalcolorpixels < (blob.area * 45 / 100)) return 0;
+	if (colorinfo.meansaturation < 70) return 0;
+	if (colorinfo.meanvalue < 55) return 0;
 	if (colorinfo.orangepixels < (colorinfo.totalcolorpixels * 25 / 100)) return 0;
 	if (colorinfo.orangepixels <= colorinfo.redpixels) return 0;
 	if (colorinfo.orangepixels <= colorinfo.yellowpixels) return 0;
@@ -312,6 +364,7 @@ void update_existing_track(ORANGETRACK *track, OVC blob, double diametermm, int 
 	int oldx = track->x;
 	int oldy = track->y;
 	int crossedline;
+	double shapescore = blob_shape_score(blob);
 
 	track->x = blob.xc;
 	track->y = blob.yc;
@@ -319,7 +372,12 @@ void update_existing_track(ORANGETRACK *track, OVC blob, double diametermm, int 
 	track->vy = track->y - oldy;
 	track->hits++;
 	track->missingframes = 0;
-	if (diametermm > track->maxdiametermm) track->maxdiametermm = diametermm;
+	if ((shapescore > track->bestshapescore) ||
+		((shapescore == track->bestshapescore) && (diametermm > track->bestdiametermm)))
+	{
+		track->bestshapescore = shapescore;
+		track->bestdiametermm = diametermm;
+	}
 	track_add_category_vote(track, categoria);
 	crossedline = (oldy < countingliney) && (track->y >= countingliney);
 
@@ -344,7 +402,8 @@ void add_new_track(std::vector<ORANGETRACK> &tracks, std::vector<int> &trackused
 	newtrack.hits = 1;
 	newtrack.missingframes = 0;
 	newtrack.counted = 0;
-	newtrack.maxdiametermm = diametermm;
+	newtrack.bestdiametermm = diametermm;
+	newtrack.bestshapescore = blob_shape_score(blob);
 	newtrack.categoryextra = 0;
 	newtrack.categoryi = 0;
 	newtrack.categoryii = 0;
@@ -457,7 +516,7 @@ int main(void)
 				blob_get_color_info(image_hsv, image_labels, blobs[i], &colorinfo);
 				if (!blob_passes_color(blobs[i], colorinfo)) continue;
 
-				diametermm = pixels_to_mm((double)blobs[i].width);
+				diametermm = pixels_to_mm(blob_diameter_pixels(blobs[i]));
 				categoria = orange_category(blobs[i], colorinfo);
 
 				besttrack = find_best_track(tracks, trackused, blobs[i].xc, blobs[i].yc);
@@ -476,7 +535,7 @@ int main(void)
 				if (!track_is_stable(tracks[besttrack])) continue;
 
 				nlaranjas++;
-				diametermm = tracks[besttrack].maxdiametermm;
+				diametermm = tracks[besttrack].bestdiametermm;
 				int calibre = orange_calibre_from_mm(diametermm);
 				categoria = track_get_category(tracks[besttrack]);
 

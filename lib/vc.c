@@ -647,6 +647,7 @@ int vc_scale_gray_to_rgb(IVC *src, IVC *dst) {
             else {
                 r = 255;
                 g = 255 - ((gray - 192) * 255) / 63; 
+                b = 0;
             }
 
             datadst[pos_dst]     = (unsigned char) r;
@@ -1429,6 +1430,7 @@ int vc_gray_edge_prewitt(IVC *src, IVC *dst, float th){
 		}
 	}
 
+	return 1;
 }
 
 int vc_gray_lowpass_mean_filter(IVC *src, IVC *dst, int kernelsize){
